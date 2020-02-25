@@ -29,6 +29,7 @@ typedef struct Process_tag
 typedef struct Process_node_tag
 {
     Process P;
+    int block_id;
     struct Process_node_tag *next;
 }Process_Node;
 
@@ -143,10 +144,11 @@ Process_Node* MakeProcessNode(int process_id,int burst_time,int memory_requireme
         (ptr->P).memory_requirement=memory_requirement;
         (ptr->P).priority=priority;
         //Doubtful for different meannings ,ask once
-        (ptr->P).status=WAITING;
+        (ptr->P).status=ACTIVE;
         //Include line for timestamp here
         //
         //--------------------------------
+        ptr->block_id=-1;//To signify no block has been allocated yet
         ptr->next=NULL;
     }
     return ptr;
@@ -237,19 +239,188 @@ void DisplayProcessQueue(Priority_Process_Queue *qptr)//For my debugging purpose
         }
     }
 }
-//--------------------------------------------
+//-----------------------------------------------------------------------------------
+
+//------------Functions to allot memory to a process-----------------------------------
+status_code AllotMemoryToProcessFirstFit(Mem_Node *lptr,Process_Node *ptr)
+{
+    Mem_Node *tptr;
+    status_code sc=SUCCESS;
+    tptr=lptr;
+    int flag=0;
+    if(lptr!=NULL)
+    {   
+        while(tptr!=NULL&&flag==0)
+        {
+            if(tptr->block_size>=ptr->P.memory_requirement)
+            {
+                if(tptr->alloted_status==FALSE)
+                {
+                    ptr->P.status=RUNNING;
+                    ptr->block_id=tptr->block_id;
+                    tptr->alloted_status=TRUE;
+                    flag=1;
+                }
+            }
+            tptr=tptr->next;
+        }
+        if(ptr->P.status!=RUNNING)//Memory could not be alloted
+        {
+            sc=FAILURE;
+        }      
+    }
+    else
+    {
+        sc=FAILURE;
+    }
+    return sc;
+}
+
+status_code AllotMemoryToProcessBestFit(Mem_Node *lptr,Process_Node *ptr)
+{
+    Mem_Node *tptr,*best;
+    status_code sc=SUCCESS;
+    tptr=lptr;
+    best=NULL;
+    int flag=0,size;
+    size=ptr->P.memory_requirement;
+    if(lptr!=NULL)
+    {
+        while(tptr!=NULL)
+        {
+            if(tptr->block_size>=size)
+            {
+                if(tptr->alloted_status==FALSE)
+                {
+                    if(best==NULL)
+                    {
+                        best=tptr;
+                    }
+                    else if(best->block_size>tptr->block_size)
+                    {
+                        best=tptr;
+                    }
+                }
+            }
+            tptr=tptr->next;
+        }
+        if(best!=NULL)//Some memory was present
+        {
+            ptr->P.status=RUNNING;
+            ptr->block_id=tptr->block_id;
+            best->alloted_status=TRUE;
+        }
+        else
+        {
+            sc=FAILURE;
+        }
+    }
+    else
+    {
+        sc=FAILURE;
+    }
+    return sc;
+}
+
+status_code ReturnMemoryToMemList(Process_Node *ptr,Mem_Node *lptr)
+{
+    status_code sc=SUCCESS;
+    int block_id,flag=0;
+    Mem_Node *mptr;
+    block_id=ptr->block_id;
+    mptr=lptr;
+    if(block_id!=-1)
+    {
+        while(mptr!=NULL&&flag==0)
+        {
+            if(mptr->block_id==block_id)
+            {
+                flag=1;
+                mptr->alloted_status=FALSE;
+                ptr->block_id=-1;
+                //If Needed-------------
+                //ptr->P.status=WAITING;
+                //----------------------
+            }
+        }
+    }
+}
+//-----------------------------------------------------------------------
+//Functions to delete a process from the Priority Queue
+void DeleteProcessFromQueue(Priority_Process_Queue *qptr,Process_Node *ptr,Process_Node *prev)
+{
+    if(prev==NULL)//Then the to be deleted node is the first node
+    {
+        qptr->PQ[ptr->P.priority].front=ptr->next;
+        if(ptr->next==NULL)
+        {
+            qptr->PQ[ptr->P.priority].rear=ptr->next;
+        }
+        free(ptr);
+    }
+    else
+    {
+        prev->next=ptr->next;
+        if(ptr->next==NULL)
+        {
+            qptr->PQ[ptr->P.priority].rear=prev;
+        }
+        free(ptr);
+    }
+}
+
+Process_Node* GetProcessFromQueueToProcess(Priority_Process_Queue *qptr,Process_Node *current_highest)
+{
+    Process_Node *ptr,*prev,*retval;
+    int i=0;
+    while(i<NUM_P&&IsPQEmpty(qptr->PQ[i])==TRUE)
+    {
+        i++;
+    }
+    if(i==NUM_P)
+    {
+        retval=NULL;
+        //sc=FAILURE;//No process to execute...
+    }
+    else
+    {
+        //Since it is in a queue fashion,we are currently assuming the process to be sorted according to the timestamps
+        retval=qptr->PQ[i].front;
+        
+        if(current_highest->P.priority<retval->P.priority)
+        {
+            //Continue executing curr_highest
+        }
+        else
+        {
+            current_highest->P.status=WAITING;
+            //ReturnMemoryToMemList
+            retval->P.status=RUNNING;
+            //AllocateMemory(Best/First Fit)
+        }
+    }
+}
+//-----------------------------------------------------------------------
 //main to test Init of memnodes
 void main()
 {
-    /*
+    
+    //For debugging Memlist
     Mem_Node *mptr;
     InitializeMemList(&mptr);
-    //DisplayMemList(mptr);
-    DisplayFreeBlocks(mptr);
-    */
+    DisplayMemList(mptr);
+    //DisplayFreeBlocks(mptr);
+    
+    
+     
+    //For debugging Process queues
     Priority_Process_Queue q;
     InitializeProcessQueue(&q);
     DisplayProcessQueue(&q);
+
+    AllotMemoryToProcessBestFit(mptr,q.PQ[1].front);
+    DisplayMemList(mptr);
+    
 }
 
 //-------------------------------------------
