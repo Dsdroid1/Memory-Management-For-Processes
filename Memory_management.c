@@ -34,12 +34,9 @@ typedef struct Process_node_tag
 
 typedef struct Queue_tag
 {
-    Process_Node *lastPN;//Circular LL?
-    /*  
-        if not circular,
-        Process_Node *front;
-        Process_Node *rear;
-    */
+    //Process_Node *lastPN;//Circular LL?
+    Process_Node *front;
+    Process_Node *rear;
 }Process_Queue;
 
 typedef struct PQ_tag
@@ -96,6 +93,7 @@ status_code InitializeMemList(Mem_Node **mptr)//Tested==True
     ptr=lptr;
     lptr=lptr->next;
     free(ptr);
+    fclose(fp);
     *mptr=lptr;
     return sc;
 }
@@ -132,14 +130,126 @@ void DisplayFreeBlocks(Mem_Node *mptr)
 }
 //-----------------------------------------
 
+//----------------------------------------------------------
+//Functions for Process and its queues
+Process_Node* MakeProcessNode(int process_id,int burst_time,int memory_requirement,int priority)//Tested==True
+{
+    Process_Node *ptr;
+    ptr=(Process_Node *)malloc(sizeof(Process_Node));
+    if(ptr!=NULL)
+    {
+        (ptr->P).process_id=process_id;
+        (ptr->P).burst_time=burst_time;
+        (ptr->P).memory_requirement=memory_requirement;
+        (ptr->P).priority=priority;
+        //Doubtful for different meannings ,ask once
+        (ptr->P).status=WAITING;
+        //Include line for timestamp here
+        //
+        //--------------------------------
+        ptr->next=NULL;
+    }
+    return ptr;
+}
+
+bool IsPQEmpty(Process_Queue P)//Tested==True
+{
+    bool retval=FALSE;
+    if(P.front==NULL)
+    {
+        retval=TRUE;
+    }
+    return retval;
+}
+
+status_code InsertProcess(Priority_Process_Queue *qptr,Process_Node *ptr)//Tested==True
+{
+    status_code sc=SUCCESS;
+    int p;
+    p=(ptr->P).priority;
+    if(IsPQEmpty(qptr->PQ[p])==TRUE)//That queue is empty
+    {
+        qptr->PQ[p].front=qptr->PQ[p].rear=ptr;
+    }
+    else
+    {
+        qptr->PQ[p].rear->next=ptr;
+        qptr->PQ[p].rear=ptr;
+    }
+}
+
+status_code InitializeProcessQueue(Priority_Process_Queue *qptr)//Tested==True
+{
+    Process_Node *ptr;
+    int i=0,flag=0;
+    int pid,burst_time,memory_requirement,priority;
+    status_code sc=SUCCESS;
+    FILE *fp;
+    for(i=0;i<NUM_P;i++)
+    {
+        (qptr->PQ[i]).rear=(qptr->PQ[i]).front=NULL;
+    }
+    fp=fopen("ProcessInfo.txt","r");
+    //The file will contain info in form of: pid burst_time memory_requirement priority
+    /*
+        NOTE:the type of burst time is not known yet....,it has to be adjusted as the timestamp stuff?
+    */
+    while((fscanf(fp,"%d%d%d%d",&pid,&burst_time,&memory_requirement,&priority))!=EOF&&flag==0)
+    {
+        ptr=MakeProcessNode(pid,burst_time,memory_requirement,priority);
+        if(ptr!=NULL)
+        {
+            sc=InsertProcess(qptr,ptr);
+            if(sc==FAILURE)
+            {
+                flag=1;
+            }
+        }
+        else
+        {
+            sc=FAILURE;
+            flag=1;
+        }
+    }  
+    fclose(fp);
+    return sc;
+}
+
+void DisplayProcessQueue(Priority_Process_Queue *qptr)//For my debugging purpose
+{
+    int i=0;
+    Process_Node *ptr;
+    for(i=0;i<NUM_P;i++)
+    {
+        printf("\nPriority Level:%d ",i);
+        if(IsPQEmpty(qptr->PQ[i]))
+        {
+            printf(" Empty");
+        }
+        else
+        {
+            ptr=qptr->PQ[i].front;
+            while(ptr!=NULL)
+            {
+                printf(" Process ID:%d MemoryRequired:%d ",ptr->P.process_id,ptr->P.memory_requirement);
+                ptr=ptr->next;
+            }
+        }
+    }
+}
 //--------------------------------------------
 //main to test Init of memnodes
 void main()
 {
+    /*
     Mem_Node *mptr;
     InitializeMemList(&mptr);
     //DisplayMemList(mptr);
     DisplayFreeBlocks(mptr);
+    */
+    Priority_Process_Queue q;
+    InitializeProcessQueue(&q);
+    DisplayProcessQueue(&q);
 }
 
 //-------------------------------------------
