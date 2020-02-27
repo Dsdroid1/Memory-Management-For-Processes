@@ -1,5 +1,6 @@
 #include<stdio.h>
 #include<stdlib.h>
+#include<time.h>
 #define NUM_P 10 
 //Initial data will be stored in files(including list sizes and process stuff)
 //No.of memory nodes is stored i the file i.e till file is not empty
@@ -20,8 +21,8 @@ typedef enum {ACTIVE,RUNNING,WAITING,COMPLETED} status_of_process;
 typedef struct Process_tag
 {
     int process_id;
-    int timestamp;//Time when process was created
-    int burst_time;//Time required by process to execute
+    time_t timestamp;//Time when process was created,gives in seconds elapsed from a specific date
+    int burst_time;//Time required by process to execute in seconds
     int memory_requirement;
     int priority;
     status_of_process status;
@@ -136,6 +137,7 @@ void DisplayFreeBlocks(Mem_Node *mptr)
 Process_Node* MakeProcessNode(int process_id,int burst_time,int memory_requirement,int priority)//Tested==True
 {
     Process_Node *ptr;
+    time_t lt;
     ptr=(Process_Node *)malloc(sizeof(Process_Node));
     if(ptr!=NULL)
     {
@@ -143,6 +145,8 @@ Process_Node* MakeProcessNode(int process_id,int burst_time,int memory_requireme
         (ptr->P).burst_time=burst_time;
         (ptr->P).memory_requirement=memory_requirement;
         (ptr->P).priority=priority;
+        
+        (ptr->P).timestamp=time(NULL);
         //Doubtful for different meannings ,ask once
         (ptr->P).status=ACTIVE;
         //Include line for timestamp here
@@ -233,7 +237,7 @@ void DisplayProcessQueue(Priority_Process_Queue *qptr)//For my debugging purpose
             ptr=qptr->PQ[i].front;
             while(ptr!=NULL)
             {
-                printf(" Process ID:%d MemoryRequired:%d ",ptr->P.process_id,ptr->P.memory_requirement);
+                printf(" Process ID:%d MemoryRequired:%d Time Remaining;%d Timestamp:%ld ",ptr->P.process_id,ptr->P.memory_requirement,ptr->P.burst_time,ptr->P.timestamp);
                 ptr=ptr->next;
             }
         }
@@ -307,7 +311,7 @@ status_code AllotMemoryToProcessBestFit(Mem_Node *lptr,Process_Node *ptr)
         if(best!=NULL)//Some memory was present
         {
             ptr->P.status=RUNNING;
-            ptr->block_id=tptr->block_id;
+            ptr->block_id=best->block_id;
             best->alloted_status=TRUE;
         }
         else
@@ -347,8 +351,21 @@ status_code ReturnMemoryToMemList(Process_Node *ptr,Mem_Node *lptr)
 }
 //-----------------------------------------------------------------------
 //Functions to delete a process from the Priority Queue
-void DeleteProcessFromQueue(Priority_Process_Queue *qptr,Process_Node *ptr,Process_Node *prev)
+void DeleteProcessFromQueue(Priority_Process_Queue *qptr,Process_Node *ptr)
 {
+    Process_Node *prev=NULL;
+    prev=qptr->PQ[ptr->P.priority].front;
+    if(prev!=ptr)
+    {
+        while(prev->next!=ptr)
+        {
+            prev=prev->next;
+        }
+    }
+    else
+    {
+        prev=NULL;
+    }
     if(prev==NULL)//Then the to be deleted node is the first node
     {
         qptr->PQ[ptr->P.priority].front=ptr->next;
@@ -369,7 +386,7 @@ void DeleteProcessFromQueue(Priority_Process_Queue *qptr,Process_Node *ptr,Proce
     }
 }
 
-Process_Node* GetProcessFromQueueToProcess(Priority_Process_Queue *qptr,Process_Node *current_highest)
+Process_Node* GetProcessFromQueueToProcess(Priority_Process_Queue *qptr/*,Process_Node *current_highest*/)
 {
     Process_Node *ptr,*prev,*retval;
     int i=0;
@@ -387,7 +404,7 @@ Process_Node* GetProcessFromQueueToProcess(Priority_Process_Queue *qptr,Process_
         //Since it is in a queue fashion,we are currently assuming the process to be sorted according to the timestamps
         retval=qptr->PQ[i].front;
         
-        if(current_highest->P.priority<retval->P.priority)
+        /*if(current_highest->P.priority<retval->P.priority)
         {
             //Continue executing curr_highest
         }
@@ -397,8 +414,46 @@ Process_Node* GetProcessFromQueueToProcess(Priority_Process_Queue *qptr,Process_
             //ReturnMemoryToMemList
             retval->P.status=RUNNING;
             //AllocateMemory(Best/First Fit)
-        }
+        }*/
     }
+    return retval;
+}
+//-----------------------------------------------------------------------
+time_t ProcessorStart(Mem_Node *mptr,Priority_Process_Queue *qptr,time_t prev_time)
+{
+    Process_Node *curr_highest=NULL;
+    time_t curr_time=time(NULL);
+    double elapsed_time; 
+    int flag=0;
+    elapsed_time=difftime(curr_time,prev_time);
+    //Take the top priority process and start its execution
+    while(elapsed_time!=0&&flag==0)
+    {
+        curr_highest=GetProcessFromQueueToProcess(qptr);
+        if(curr_highest!=NULL)
+        {
+            if(elapsed_time>=curr_highest->P.burst_time)
+            {
+                elapsed_time-=curr_highest->P.burst_time;
+                curr_highest->P.status=COMPLETED;
+                printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
+                DeleteProcessFromQueue(qptr,curr_highest);
+                //RemoveProcess
+            }
+            else if(elapsed_time<curr_highest->P.burst_time)
+            {
+                curr_highest->P.burst_time-=elapsed_time;
+                curr_highest->P.status=RUNNING;
+                elapsed_time=0;
+            }
+        }
+        else
+        {
+            flag=1;
+            printf("\nAll processes executed");
+        }
+    }  
+    return curr_time;  
 }
 //-----------------------------------------------------------------------
 //main to test Init of memnodes
@@ -407,19 +462,62 @@ void main()
     
     //For debugging Memlist
     Mem_Node *mptr;
+    time_t prev_time;
+    int flag=0,code;
     InitializeMemList(&mptr);
     DisplayMemList(mptr);
     //DisplayFreeBlocks(mptr);
-    
-    
-     
     //For debugging Process queues
     Priority_Process_Queue q;
     InitializeProcessQueue(&q);
     DisplayProcessQueue(&q);
+    prev_time=time(NULL);
+    //int a;
+    //printf("\nEnter");
+    //scanf("%d",&a);
+    //curr_time=time(NULL);
+    //prev_time=ProcessorStart(mptr,&q,prev_time);
+    //printf("\n---------------------------------------");
+    //DisplayProcessQueue(&q);
+    //AllotMemoryToProcessBestFit(mptr,q.PQ[1].front);
+    //DisplayMemList(mptr);
+    int pid,burst_time,memory_requirement,priority;
+    Process_Node *ptr;
+    status_code sc;
+    //Basic UI
+    while(flag==0)
+    {
+        printf("\nWhat do you want to do:");
+        printf("\n1.Add Process");
+        printf("\n2.View Status");
+        printf("\n3.Exit");
+        scanf("%d",&code);
+        switch(code)
+        {
+            case 1: prev_time=ProcessorStart(mptr,&q,prev_time);//Execute from prev time to current
+                    printf("\n---------------------------------------");
+                    //Ask for process details
+                    printf("\nAbove is the current state:");
+                    printf("\nEnter the details:Process_ID,burst Time,memory,priority:");
+                    scanf("%d%d%d%d",&pid,&burst_time,&memory_requirement,&priority);
+                    ptr=MakeProcessNode(pid,burst_time,memory_requirement,priority);
+                    sc=InsertProcess(&q,ptr);
+                    if(sc==SUCCESS)
+                    {
+                        printf("\nSUCCESS IN INSERTING");
+                    }
+                    break;
 
-    AllotMemoryToProcessBestFit(mptr,q.PQ[1].front);
-    DisplayMemList(mptr);
+            case 2: prev_time=ProcessorStart(mptr,&q,prev_time);
+                    printf("\n---------------------------------------");
+                    DisplayProcessQueue(&q);
+                    break;
+
+            default:
+                    flag=1;
+                    break;
+        }
+    }
     
 }
 
