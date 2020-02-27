@@ -419,41 +419,188 @@ Process_Node* GetProcessFromQueueToProcess(Priority_Process_Queue *qptr/*,Proces
     return retval;
 }
 //-----------------------------------------------------------------------
-time_t ProcessorStart(Mem_Node *mptr,Priority_Process_Queue *qptr,time_t prev_time)
+void UpdatePriority(Mem_Node *mptr,Priority_Process_Queue *qptr,time_t prev_time,time_t curr_time);
+void ProcessorStart(Mem_Node *mptr,Priority_Process_Queue *qptr,int exec_time,time_t curr_time,time_t prev_time)
 {
-    Process_Node *curr_highest=NULL;
-    time_t curr_time=time(NULL);
-    double elapsed_time; 
-    int flag=0;
-    elapsed_time=difftime(curr_time,prev_time);
+    //Perfrom task from prev_time to curr_time
+    //Change has made it incorrect in interpretation,dont delete,retrieve from github
+    Process_Node *curr_highest=NULL,*tptr,*old;
+    //time_t curr_time=time(NULL);
+    //double elapsed_time,thirty_time;//For update 
+    //int flag=0,updatecaller,turn=0,toupdate=0,ret_prev_time;
+    //elapsed_time=difftime(curr_time,prev_time);
     //Take the top priority process and start its execution
-    while(elapsed_time!=0&&flag==0)
+    int runtime,flag=0,keep_runtime;
+    //First traverse the queue to get the oldest process
+    int i=1;//0 cant be updated
+    old=NULL;
+    while(i<NUM_P)
     {
-        curr_highest=GetProcessFromQueueToProcess(qptr);
-        if(curr_highest!=NULL)
+        tptr=qptr->PQ[i].front;
+
+        while(tptr!=NULL)
         {
-            if(elapsed_time>=curr_highest->P.burst_time)
+            if(old==NULL)
             {
-                elapsed_time-=curr_highest->P.burst_time;
-                curr_highest->P.status=COMPLETED;
-                printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
-                DeleteProcessFromQueue(qptr,curr_highest);
-                //RemoveProcess
+                old=tptr;
             }
-            else if(elapsed_time<curr_highest->P.burst_time)
+            else if(old->P.timestamp>tptr->P.timestamp)
             {
-                curr_highest->P.burst_time-=elapsed_time;
-                curr_highest->P.status=RUNNING;
-                elapsed_time=0;
+                old=tptr;
             }
+            tptr=tptr->next;
+        }
+        i++;
+    }
+    if(old!=NULL)//Some node may need update status
+    {
+        if(old->P.timestamp+30<curr_time)//old becomes NULL when there is no node to update 
+        {
+            runtime=30-(prev_time-old->P.timestamp);//Time to execute currently,without update
+            //exec_time=exec_time-runtime;
+            keep_runtime=runtime;
+            while(runtime!=0&&flag==0)
+            {
+                curr_highest=GetProcessFromQueueToProcess(qptr);
+                if(curr_highest!=NULL)
+                {
+                    if(runtime>=curr_highest->P.burst_time)
+                    {
+                        runtime-=curr_highest->P.burst_time;
+                        curr_highest->P.status=COMPLETED;
+                        printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
+                        DeleteProcessFromQueue(qptr,curr_highest);
+                        //RemoveProcess
+                    }
+                    else if(runtime<curr_highest->P.burst_time)
+                    {
+                        curr_highest->P.burst_time-=runtime;
+                        curr_highest->P.status=RUNNING;
+                        runtime=0;
+                    }
+                }
+                else
+                {
+                    flag=1;
+                    printf("\nAll processes executed");
+                }
+            }
+            UpdatePriority(mptr,qptr,prev_time,prev_time+keep_runtime);//To be called
+            //Now to execute the remaining part of exec_time
+            ProcessorStart(mptr,qptr,exec_time-keep_runtime,curr_time,prev_time+keep_runtime);
         }
         else
         {
-            flag=1;
-            printf("\nAll processes executed");
+            runtime=exec_time;//Time to execute currently,without update
+            //exec_time=exec_time-runtime;
+            //keep_runtime=runtime;
+            while(runtime!=0&&flag==0)
+            {
+                curr_highest=GetProcessFromQueueToProcess(qptr);
+                if(curr_highest!=NULL)
+                {
+                    if(runtime>=curr_highest->P.burst_time)
+                    {
+                        runtime-=curr_highest->P.burst_time;
+                        curr_highest->P.status=COMPLETED;
+                        printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
+                        DeleteProcessFromQueue(qptr,curr_highest);
+                        //RemoveProcess
+                    }
+                    else if(runtime<curr_highest->P.burst_time)
+                    {
+                        curr_highest->P.burst_time-=runtime;
+                        curr_highest->P.status=RUNNING;
+                        runtime=0;
+                    }
+                }
+                else
+                {
+                    flag=1;
+                    printf("\nAll processes executed");
+                }
+            }
         }
-    }  
-    return curr_time;  
+    }
+    else//Do everthing without update
+    {
+        runtime=exec_time;//Time to execute currently,without update
+        //exec_time=exec_time-runtime;
+        //keep_runtime=runtime;
+        while(runtime!=0&&flag==0)
+        {
+            curr_highest=GetProcessFromQueueToProcess(qptr);
+            if(curr_highest!=NULL)
+            {
+                if(runtime>=curr_highest->P.burst_time)
+                {
+                    runtime-=curr_highest->P.burst_time;
+                    curr_highest->P.status=COMPLETED;
+                    printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
+                    DeleteProcessFromQueue(qptr,curr_highest);
+                    //RemoveProcess
+                }
+                else if(runtime<curr_highest->P.burst_time)
+                {
+                    curr_highest->P.burst_time-=runtime;
+                    curr_highest->P.status=RUNNING;
+                    runtime=0;
+                }
+            }
+            else
+            {
+                flag=1;
+                printf("\nAll processes executed");
+            }
+        }
+    }
+    
+}
+//-----------------------------------------------------------------------
+void UpdatePriority(Mem_Node *mptr,Priority_Process_Queue *qptr,time_t prev_time,time_t curr_time)
+{
+    //time_t curr_time;
+    //curr_time=time(NULL);
+    Process_Node *prev,*tptr,*ptr,*new;
+    //start incresaing priority if cond applicable for processes with priority>0
+    int i=1;
+    while(i<NUM_P)
+    {
+        if(IsPQEmpty(qptr->PQ[i])==FALSE)
+        {
+            ptr=qptr->PQ[i].front;
+            tptr=ptr;
+            prev=NULL;
+            while(tptr!=NULL)
+            {
+                if(curr_time-(tptr->P.timestamp)>=30)//Update priority
+                {
+                    new=MakeProcessNode(tptr->P.process_id,tptr->P.burst_time,tptr->P.memory_requirement,tptr->P.priority-1);
+                    new->P.timestamp=curr_time;
+                    if(prev!=NULL)
+                    {
+                        prev->next=tptr->next;
+                    }
+                    DeleteProcessFromQueue(qptr,tptr);
+                    InsertProcess(qptr,new);
+                    if(prev!=NULL)
+                    {
+                        tptr=prev->next;
+                    }
+                    else
+                    {
+                        tptr=ptr->next;
+                    }
+                }
+                else//Priority of this one need not be updated
+                {
+                    tptr=tptr->next;
+                }
+                
+            }
+        }
+        i++;
+    }
 }
 //-----------------------------------------------------------------------
 //main to test Init of memnodes
@@ -462,8 +609,8 @@ void main()
     
     //For debugging Memlist
     Mem_Node *mptr;
-    time_t prev_time;
-    int flag=0,code;
+    time_t prev_time,curr_time;
+    int flag=0,code,exec_time;
     InitializeMemList(&mptr);
     DisplayMemList(mptr);
     //DisplayFreeBlocks(mptr);
@@ -494,7 +641,13 @@ void main()
         scanf("%d",&code);
         switch(code)
         {
-            case 1: prev_time=ProcessorStart(mptr,&q,prev_time);//Execute from prev time to current
+            case 1: 
+                    curr_time=time(NULL);
+                    exec_time=difftime(curr_time,prev_time);
+                    ProcessorStart(mptr,&q,exec_time,curr_time,prev_time);//Execute from prev time to current
+                    prev_time=curr_time;
+                    //prev_time=UpdatePriority(mptr,&q,prev_time);
+                    
                     printf("\n---------------------------------------");
                     //Ask for process details
                     printf("\nAbove is the current state:");
@@ -508,7 +661,12 @@ void main()
                     }
                     break;
 
-            case 2: prev_time=ProcessorStart(mptr,&q,prev_time);
+            case 2: 
+                    curr_time=time(NULL);
+                    exec_time=difftime(curr_time,prev_time);
+                    ProcessorStart(mptr,&q,exec_time,curr_time,prev_time);
+                    prev_time=curr_time;
+                    //prev_time=UpdatePriority(mptr,&q,prev_time);
                     printf("\n---------------------------------------");
                     DisplayProcessQueue(&q);
                     break;
