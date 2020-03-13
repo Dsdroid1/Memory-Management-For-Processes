@@ -904,7 +904,7 @@ void main()
                     }
                     else
                     {
-                        printf("\nThis process is invalid as its meory required is greater than available memory");
+                        printf("\nThis process is invalid as its memory required is greater than available memory");
                     }
                     
                     curr_time=time(NULL);
