@@ -1,12 +1,16 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<time.h>
-#define NUM_P 10 
+#define NUM_P 10 //No.of prioirity levels
 //Initial data will be stored in files(including list sizes and process stuff)
 //No.of memory nodes is stored i the file i.e till file is not empty
 
+//To use BestFit strategy,use search to locate AllotMemoryToProcessBestFit 
+//and use it in corresponding functions,else the FirstFit one.............
+
 //This part has structures for the memory nodes.....
 int num_nodes_for_memory=0;
+int Max_mem_required=0;
 typedef enum {FALSE,TRUE} bool;
 typedef struct Mem_Node_tag
 {
@@ -84,6 +88,10 @@ status_code InitializeMemList(Mem_Node **mptr)//Tested==True
         nptr=MakeMemoryNode(id,size);
         if(nptr!=NULL)
         {
+            if(size>Max_mem_required)
+            {
+                Max_mem_required=size;
+            }
             ptr->next=nptr;
             ptr=nptr;
             num_nodes_for_memory++;
@@ -122,6 +130,7 @@ void DisplayMemList(Mem_Node *mptr)//Tested==True
 
 void DisplayFreeBlocks(Mem_Node *mptr)
 {
+    printf("\n-----------------------------------");
     printf("\nThe free blocks are:");
     while(mptr!=NULL)
     {
@@ -131,6 +140,7 @@ void DisplayFreeBlocks(Mem_Node *mptr)
         }
         mptr=mptr->next;
     }
+    printf("\n-----------------------------------");
 }
 //-----------------------------------------
 
@@ -274,7 +284,7 @@ void DisplayProcessQueue(Priority_Process_Queue *qptr)//For my debugging purpose
             while(ptr!=NULL)
             {
                 printf("\n\t");
-                printf(" Process ID:%d MemoryRequired:%d Time_Remaining:%d Timestamp:%ld Block_id:%d",ptr->P.process_id,ptr->P.memory_requirement,ptr->P.burst_time,ptr->P.timestamp,ptr->block_id);
+                printf(" Process ID:%d MemoryRequired:%d Time_Remaining:%d Timestamp:%s Block_id:%d",ptr->P.process_id,ptr->P.memory_requirement,ptr->P.burst_time,asctime(localtime(&(ptr->P.timestamp))),ptr->block_id);
                 if(ptr->block_id==-1)
                 {
                     printf(" Alloted:False");
@@ -542,6 +552,11 @@ void ProcessorStart(Mem_Node *mptr,Priority_Process_Queue *qptr,int exec_time,ti
                         runtime-=curr_highest->P.burst_time;
                         curr_highest->P.status=COMPLETED;
                         printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
+                        FILE *fp;
+                        time_t t=time(NULL);
+                        fp=fopen("CompletionInfo.txt","a");
+                        fprintf(fp,"Process Completed Info:ID-%d,Timestamp-%s",curr_highest->P.process_id,asctime(localtime(&t)));
+                        fclose(fp);
                         DeleteProcessFromQueue(qptr,curr_highest,mptr);
                         AllotToRemainingProcess(qptr,mptr);
                         //DeallotEverything(qptr,mptr);
@@ -580,6 +595,11 @@ void ProcessorStart(Mem_Node *mptr,Priority_Process_Queue *qptr,int exec_time,ti
                         runtime-=curr_highest->P.burst_time;
                         curr_highest->P.status=COMPLETED;
                         printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
+                        FILE *fp;
+                        time_t t=time(NULL);
+                        fp=fopen("CompletionInfo.txt","a");
+                        fprintf(fp,"Process Completed Info:ID-%d,Timestamp-%s",curr_highest->P.process_id,asctime(localtime(&t)));
+                        fclose(fp);
                         DeleteProcessFromQueue(qptr,curr_highest,mptr);
                         AllotToRemainingProcess(qptr,mptr);
                         //DeallotEverything(qptr,mptr);
@@ -616,6 +636,11 @@ void ProcessorStart(Mem_Node *mptr,Priority_Process_Queue *qptr,int exec_time,ti
                     runtime-=curr_highest->P.burst_time;
                     curr_highest->P.status=COMPLETED;
                     printf("\n Process %d COMPLETED:",curr_highest->P.process_id);
+                    FILE *fp;
+                    time_t t=time(NULL);
+                    fp=fopen("CompletionInfo.txt","a");
+                    fprintf(fp,"Process Completed Info:ID-%d,Timestamp-%s",curr_highest->P.process_id,asctime(localtime(&t)));
+                    fclose(fp);
                     DeleteProcessFromQueue(qptr,curr_highest,mptr);
                     AllotToRemainingProcess(qptr,mptr);
                     //DeallotEverything(qptr,mptr);
@@ -678,7 +703,13 @@ void AllotMemory(Priority_Process_Queue *qptr,Mem_Node *mptr)
             {
                 while(ptr!=NULL)
                 {
+                    //---------------------------------------------
+                    //-----To use AllotMemoryToProcessFirstFit-----
                     AllotMemoryToProcessBestFit(mptr,ptr);
+                    //---------------------------------------------
+                    //-------To use AllotMemoryToProcessFirstFit---
+                    //AllotMemoryToProcessFirstFit(mptr,ptr);
+                    //---------------------------------------------
                     ptr=ptr->next;
                     num_alloted++;
                 }
@@ -719,7 +750,13 @@ void AllotToRemainingProcess(Priority_Process_Queue *qptr,Mem_Node *mptr)
         {
             if(ptr->block_id==-1)
             {   
+                //-------To use AllotMemoryToProcessFirstFit---
                 sc=AllotMemoryToProcessBestFit(mptr,ptr);
+                //---------------------------------------------
+                //-------To use AllotMemoryToProcessFirstFit---
+                //sc=AllotMemoryToProcessFirstFit(mptr,ptr);
+                //--------------------------------------------
+
                 if(sc==FAILURE)//This block was bigger than available free block
                 {
                     ptr=ptr->next;
@@ -819,6 +856,10 @@ void main()
     int pid,burst_time,memory_requirement,priority;
     Process_Node *ptr;
     status_code sc;
+    FILE *fp;
+    fp=fopen("CompletionInfo.txt","w");
+    //fprintf(fp,"Process Completed Info:ID-%d,Timestamp-%s",curr_highest->P.process_id,asctime(localtime(&curr_highest->P.timestamp)));
+    fclose(fp);//To delete initial data.
     //Basic UI
     while(flag==0)
     {
@@ -841,15 +882,31 @@ void main()
                     printf("\nAbove is the current state:");
                     printf("\nEnter the details:Process_ID,burst Time,memory,priority:");
                     scanf("%d%d%d%d",&pid,&burst_time,&memory_requirement,&priority);
-                    ptr=MakeProcessNode(pid,burst_time,memory_requirement,priority);
-                    sc=InsertProcess(&q,ptr);
-                    DeallotEverything(&q,mptr);
-                    AllotMemory(&q,mptr);
-                    DisplayMemList(mptr);
-                    if(sc==SUCCESS)
+                    if(memory_requirement<Max_mem_required)
                     {
-                        printf("\nSUCCESS IN INSERTING");
+                        if(priority<NUM_P&&priority>=0)
+                        {
+                            ptr=MakeProcessNode(pid,burst_time,memory_requirement,priority);
+                            sc=InsertProcess(&q,ptr);
+                            DeallotEverything(&q,mptr);
+                            AllotMemory(&q,mptr);
+                            DisplayMemList(mptr);
+                            if(sc==SUCCESS)
+                            {
+                                printf("\nSUCCESS IN INSERTING");
+                            }
+                        }
+                        else
+                        {
+                            printf("\nNot a valid priority!");
+                        }
+                        
                     }
+                    else
+                    {
+                        printf("\nThis process is invalid as its meory required is greater than available memory");
+                    }
+                    
                     curr_time=time(NULL);
                     prev_time=curr_time;
                     break;
@@ -863,6 +920,7 @@ void main()
                     printf("\n---------------------------------------");
                     DisplayProcessQueue(&q);
                     DisplayMemList(mptr);
+                    DisplayFreeBlocks(mptr);
                     curr_time=time(NULL);
                     prev_time=curr_time;
                     break;
