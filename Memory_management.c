@@ -130,6 +130,7 @@ void DisplayMemList(Mem_Node *mptr)//Tested==True
 
 void DisplayFreeBlocks(Mem_Node *mptr)
 {
+    int count=0;
     printf("\n-----------------------------------");
     printf("\nThe free blocks are:");
     while(mptr!=NULL)
@@ -137,9 +138,11 @@ void DisplayFreeBlocks(Mem_Node *mptr)
         if(mptr->alloted_status==FALSE)
         {
             printf("\nID:%d SIZE:%d ",mptr->block_id,mptr->block_size);
+            count++;
         }
         mptr=mptr->next;
     }
+    printf("\nNo.of Free Blocks:%d",count);
     printf("\n-----------------------------------");
 }
 //-----------------------------------------
